@@ -1,35 +1,38 @@
-2020CS50426  Gurarmaan Singh Panjeta
+2020CS10373 Rishi Jain
+2020CS50426 Gurarmaan Singh Panjeta
 
-COL333 Assignment 1: Automated Correction of Incorrectly Recognised Text
-
-
-The conf_matrix is a mapping of possibilities for incorrect character replacement for a character. However, what we need is a mapping from a character to what it’s correct versions could be. Thus we need to “invert” this matrix. In my implementation, this has been performed using “dictr()”,
-and self.replace stores the new matrix. For a character key ch, the values stored represent what characters ch could have been mistaken for.
-
-genPerm(s, i) is the standard function for creating nodes upon expansion of the “i”th character of the string s. 
+estimator.py
 
 
-I tried the following (later discarded) approaches as the main block :- 
+The estimation is done using particle filtering, and we found that a particle set of 5000 particles optimises speed and accuracy both, which s what we have gone with.
 
-1. Select first 3 [0,1,2] indices from string. Generate all possible expansions. Select Best Child and update self.best_state. Repeat process for bands [1,2,3], [2,3,4], [3,4,5] and so on till the end of string. Discarded because does not correct enough faulty characters.
-2. Strategy 1, but considered for a band of non_whitespace characters. This allowed a larger number of children per expansion. Had to implement functions that gave first valid band, last valid band and next valid band. Discarded because  does not correct enough faulty characters. 
-Strategy 2 was found to perform better than strategy 1, and I decided to layer this after my main algorithm to further refine inputs. 
-3. Split the best string from whitespaces. For each word thus obtained, expand by creating all possible iterations by changing just 1, but any character of the word. Choose best word. String the words together, update best_state. Discarded because words ended up being meaningful, but not coherent with the sentence itself.
-4. Strategy 3, but instead of 1 character, choose a band of [0,1,2] indexed characters. Obtain all possible children. Select best. Update word. Repeat for bands [1,2,3], [2,3,4], [3,4,5] until end of word. Discarded for similar reasons to strategy 3.
-5. Tried layering above strategies with a random iterations at the end. select 3 random characters, expand , and choose best string.  Keep repeating until time runs out. Did not seem to make any difference though, hence discarded.
+The particles are initialised to a uniform distribution (initially, the StdCar can be anywhere).
+Then, as measurements arrive from the noisy sensor, we figure out a circular region where the particle may be present (same radial distance).
+With time, we (and the StdCars), move around, and some of the probabilities are found to be unlikely (since they are outside the grid/on a block).
+The Transition probabilities are used to Compute the positions are computed from the prior beliefs.
+Then, the current observation computes the viability of that state and accordingly allots a weight to that state
+90% of the States are resampled as per the weights. 
+The rest 10% are randomly distributed across the map. These come in handy in case our best estimate is wrong and quickly help us transition to the actual answer.
 
 
-Key insights obtained from these attempts - 
-1. For whatever change you recommend, always compute cost function on the whole string to decide whether move should be performed or not. Computing cost function locally may suggest a more meaningful word, but it also leads to decoherence with the rest of the sentence.
-2. Do not always select just one best child. Keep some other higher cost variations with you as well. They may prove to be useful later.
-3. Do not waste resources on an explored state again!!! 
 
-Insight 1 and 2 suggested that my algorithm would need something that can store multiple variations of the best string, preferable ordered for easy insterion of new variations and selection of the best version at the end. Such an algorithm would also need to check whether a variation already exists or not, and an ordered array serves our purpose!
 
-Algorithm - 
+intelligentDriver.py
 
-1. Maintain a matrix self.store_vals with self.store_vals[i][j] storing the tuple t = (jth lowest cost of the sentence with word[i]’s iterated version, word[i]’s iterated version). Initialised self.store_vals[i] with the list [(cost of best state, word[i])]
-2.  For the word indexed i, access all previous iterations stored in self.store_vals[i]. Create further iterations (dictated by character number increment in each loop, no change if word length < character number), and add new variations in order of the cost function they introduce to the sentence. Update best word for position i for further cost computations
- when it is done for variations at i+1. The self.best_state after all words have been accounted for is  formulated by stringing together all the words that yield the lowest costs (at the start of self.store_vals[i] for all i).
-3. Perform step 2, 3 times. This incorporates previous improvements to suggest better changes. I found that I could do this repition 4 times while still being in the stipulated time, but it would overcorrect some words that shouldn’t have been , like french or german words
-4. The output at this point is already quite reformed. We now layer it with discarded strategy 1,2 and strategy 4 (but cost evaluated for the whole sentence) for further refinement.
+We use the mentioned createWorldGraph() function to make a graph of the grid.
+ Then, only nodes are considered reachable whose corresponding edges have below a specified value of probabilities from any stdCar are considered for evaluating paths from the current position to the next checkpoint.
+
+Once such a path is found, we move towards the next tile on that path.
+If no such safe path is found, we stay put for some while before the surroundings clear up.
+
+Accuracy is increased using some tricks as below:-
+
+1) We predict the motion of non-parked cars with a single look-ahead, and try to avoid going into an impending crash
+
+2) If we feel that regions of high probabilities surround the car, we drop the pursuit of the goal for some while and focus on not-crashing. When the surroundings clear up, we reprioritise.
+
+3) To reduce impacts with the boundaries, we ensure that the targets (in case the next best move is to go into a grid-border tile)
+ are set to the non-grid-border edges of the tile, so that we accommodate the slow turns of the car and not collide with the grid-boundaries.
+
+4) To induce sharper turns, we target the average of (the next tile's center) and the (current position).
+
